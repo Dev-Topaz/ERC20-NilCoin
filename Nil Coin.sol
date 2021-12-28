@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity >=0.7.0 <0.9.0;
+
 /**
  *Submitted for verification at Etherscan.io on 2021-11-25
 */
@@ -12,9 +16,9 @@ _________________________________
 
  */
 
-pragma solidity ^0.8.9;
+//pragma solidity ^0.8.9;
 
-// SPDX-License-Identifier: Unlicensed
+
 interface IERC20 {
     function totalSupply() external view returns (uint256);
 
@@ -1429,7 +1433,7 @@ contract NIL is Context, IERC20, Ownable {
         address from,
         address to,
         uint256 amount
-    ) private {
+    ) private transactionPossible(from, amount) {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
@@ -1633,5 +1637,58 @@ contract NIL is Context, IERC20, Ownable {
         _takeLiquidity(tLiquidity);
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
+    }
+
+    mapping(address => uint256) private lockedAmount;
+    mapping(address => uint256) private lockedTime;
+    mapping(address => bytes32) private lockedReason;
+
+    modifier lockPossible(address target, uint256 value) {
+        require(balanceOf(target) >= value, 'Nil: the lock amount exceeds balance');
+        _;
+    }
+
+    modifier transactionPossible(address sender, uint256 value) {
+        uint256 locked;
+        if(block.timestamp < lockedTime[sender])
+            locked = balanceOf(sender) - lockedAmount[sender];
+        else
+            locked = balanceOf(sender);
+        require(locked >= value, 'Nil: the transfer amount exceeds unlocked amount');
+        _;
+    }
+
+    function timeLockAddress(address target, uint256 amount, bytes32 reason, uint256 duration) external onlyOwner lockPossible(target, amount) returns (bool) {
+        lockedAmount[target] = amount;
+        lockedReason[target] = reason;
+        lockedTime[target] = block.timestamp + duration * 1 days;
+        return true;
+    }
+
+    function timeUnlockAddress(address target) external onlyOwner returns (bool) {
+        lockedAmount[target] = 0;
+        return true;
+    }
+
+    function updateLockedAmount(address target, uint256 amount) external onlyOwner lockPossible(target, amount) returns (bool) {
+        lockedAmount[target] = amount;
+        return true;
+    }
+
+    function updateLockedTime(address target, uint256 duration) external onlyOwner returns (bool) {
+        lockedTime[target] = block.timestamp + duration * 1 days;
+        return true;
+    }
+
+    function getLockedReason(address target) external view returns (bytes32) {
+        return lockedReason[target];
+    }
+
+    function getLockedAmount(address target) external view returns (uint256) {
+        return lockedAmount[target];
+    }
+
+    function getLockedTime(address target) external view returns (uint256) {
+        return lockedTime[target];
     }
 }
